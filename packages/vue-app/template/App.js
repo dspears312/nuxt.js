@@ -93,12 +93,18 @@ export default {
     <% } %>
     <% if (features.layouts) { %>
     layout: null,
-    layoutName: ''
+    layoutName: '',
+    nbFetching: 0
     <% } %>
   }),
   <% } %>
   beforeCreate () {
     Vue.util.defineReactive(this, 'nuxt', this.$options.nuxt)
+    if (process.server) {
+      this.state = this.$options.context.ssrContext.nuxt
+    } else {
+      this.state = window.<%= globals.context %>
+    }
   },
   created () {
     // Add this.$nuxt in child instances
@@ -130,6 +136,9 @@ export default {
   computed: {
     isOffline () {
       return !this.isOnline
+    },
+    isFetching() {
+      return this.nbFetching > 0
     }
   },
   <% } %>

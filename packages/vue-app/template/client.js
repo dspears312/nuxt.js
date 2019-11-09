@@ -8,21 +8,28 @@ import {
   <% if (features.transitions || (features.middleware && features.layouts)) { %>sanitizeComponent,<% } %>
   <% if (loading) { %>resolveRouteComponents,<% } %>
   getMatchedComponents,
-  getMatchedComponentsInstances,
   flatMapComponents,
   setContext,
   <% if (features.transitions || features.asyncData || features.fetch) { %>getLocation,<% } %>
+  middlewareSeries,
   compile,
   getQueryDiff,
   globalHandleError
 } from './utils.js'
 import { createApp<% if (features.layouts) { %>, NuxtError<% } %> } from './index.js'
-import NuxtLink from './components/nuxt-link.<%= features.clientPrefetch ? "client" : "server" %>.js' // should be included after ./index.js
+import fetchMixin from './mixins/fetch.client'
+import NuxtLink from './components/nuxt-link.<%= router.prefetchLinks ? "client" : "server" %>.js' // should be included after ./index.js
 
+// Async Data & fetch mixin
+if (!Vue.__nuxt__fetch__mixin__) {
+  Vue.mixin(fetchMixin)
+  Vue.__nuxt__fetch__mixin__ = true
+}
 // Component: <NuxtLink>
 Vue.component(NuxtLink.name, NuxtLink)
 <% if (features.componentAliases) { %>Vue.component('NLink', NuxtLink)<% } %>
 
+// Fetch polyfill
 <% if (fetch.client) { %>if (!global.fetch) { global.fetch = fetch }<% } %>
 
 // Global shared references
@@ -130,12 +137,6 @@ function mapTransitions (Components, to, from) {
   this._queryChanged = JSON.stringify(to.query) !== JSON.stringify(from.query)
   this._diffQuery = (this._queryChanged ? getQueryDiff(to.query, from.query) : [])
 
-  <% if (loading) { %>
-  if (this._pathChanged && this.$loading.start && !this.$loading.manual) {
-    this.$loading.start()
-  }
-  <% } %>
-
   try {
     <% if (loading) { %>
     if (!this._pathChanged && this._queryChanged) {
@@ -203,7 +204,7 @@ function resolveComponents (router) {
       Component = await Component()
     }
     // Sanitize it and save it
-    const _Component = applySSRData(sanitizeComponent(Component), NUXT.data ? NUXT.data[index] : null)
+    const _Component = sanitizeComponent(Component)
     match.components[key] = _Component
     return _Component
   })
@@ -296,6 +297,9 @@ async function render (to, from, next) {
     from,
     next: _next.bind(this)
   })
+  // reset promises when navigating
+  // this.nbFetching++
+
   this._dateLastError = app.nuxt.dateErr
   this._hadError = Boolean(app.nuxt.err)
 
@@ -332,7 +336,7 @@ async function render (to, from, next) {
 
     // Show error page
     app.context.error({ statusCode: 404, message: `<%= messages.error_404 %>` })
-    return next()
+    return _next()
   }
 
   <% if (features.asyncData || features.fetch) { %>
@@ -403,13 +407,13 @@ async function render (to, from, next) {
         statusCode: validationError.statusCode || '500',
         message: validationError.message
       })
-      return next()
+      return _next()
     }
 
     // ...If .validate() returned false
     if (!isValid) {
       this.error({ statusCode: 404, message: `<%= messages.error_404 %>` })
-      return next()
+      return _next()
     }
     <% } %>
 
@@ -504,14 +508,7 @@ async function render (to, from, next) {
     <% } %>
 
     // If not redirected
-    if (!nextCalled) {
-      <% if (loading) { %>
-      if (this.$loading.finish && !this.$loading.manual) {
-        this.$loading.finish()
-      }
-      <% } %>
-      next()
-    }
+    _next()
 
   } catch (err) {
     const error = err || {}
@@ -533,7 +530,7 @@ async function render (to, from, next) {
 
     this.error(error)
     this.<%= globals.nuxt %>.$emit('routeChanged', to, from, error)
-    next()
+    _next()
   }
 }
 
@@ -745,9 +742,8 @@ function addHotReload ($component, depth) {
       _forceUpdate()
       setTimeout(() => hotReloadAPI(this), 100)
     })
-  }
+  })
 }
-<% } %>
 
 <% if (features.layouts || features.transitions) { %>async <% } %>function mountApp (__app) {
   // Set global variables
@@ -777,10 +773,6 @@ function addHotReload ($component, depth) {
     Vue.nextTick(() => {
       // Call window.{{globals.readyCallback}} callbacks
       nuxtReady(_app)
-      <% if (isDev) { %>
-      // Enable hot reloading
-      hotReloadAPI(_app)
-      <% } %>
     })
   }
   <% if (features.transitions) { %>
@@ -805,6 +797,7 @@ function addHotReload ($component, depth) {
   // Add beforeEach router hooks
   router.beforeEach(loadAsyncComponents.bind(_app))
   router.beforeEach(render.bind(_app))
+  router.afterEach(normalizeComponents)
 
   // If page already is server rendered
   if (NUXT.serverRendered) {

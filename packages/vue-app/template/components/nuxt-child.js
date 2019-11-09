@@ -16,6 +16,7 @@ export default {
   render (h, { parent, data, props }) {
     <% if (features.transitions) { %>
     data.nuxtChild = true
+    const h = parent.$createElement
     const _parent = parent
     const transitions = parent.<%= globals.nuxt %>.nuxt.transitions
     const defaultTransition = parent.<%= globals.nuxt %>.nuxt.defaultTransition
@@ -27,6 +28,7 @@ export default {
       }
       parent = parent.$parent
     }
+
     data.nuxtChildDepth = depth
     const transition = transitions[depth] || defaultTransition
     const transitionProps = {}

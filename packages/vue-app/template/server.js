@@ -10,7 +10,17 @@ import {
   promisify
 } from './utils.js'
 import { createApp<% if (features.layouts) { %>, NuxtError<% } %> } from './index.js'
+import fetchMixin from './mixins/fetch.server'
 import NuxtLink from './components/nuxt-link.server.js' // should be included after ./index.js
+
+// Update serverPrefetch strategy
+Vue.config.optionMergeStrategies.serverPrefetch = Vue.config.optionMergeStrategies.created
+
+// Async Data & fetch mixin
+if (!Vue.__nuxt__fetch__mixin__) {
+  Vue.mixin(fetchMixin)
+  Vue.__nuxt__fetch__mixin__ = true
+}
 
 // Component: <NuxtLink>
 Vue.component(NuxtLink.name, NuxtLink)

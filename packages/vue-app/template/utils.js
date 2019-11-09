@@ -43,9 +43,25 @@ export function applyAsyncData (Component, asyncData) {
   }
 
   Component.options.__hasNuxtData = true
+export function hasFetch(vm) {
+  return vm.$options && typeof vm.$options.fetch === 'function'
+}
 
-  if (Component._Ctor && Component._Ctor.options) {
-    Component._Ctor.options.data = Component.options.data
+export function applyAsyncData(vm, asyncData = {}) {
+  // Overwrite `data` with asyncData result
+  vm.$data.$asyncData = Vue.observable(asyncData)
+
+  for (const key in asyncData) {
+    Object.defineProperty(vm, key, {
+      get() {
+        return vm.$data.$asyncData[key]
+      },
+      set(value) {
+        return vm.$data.$asyncData[key] = value
+      },
+      enumerable: true,
+      configurable: true
+    })
   }
 }
 <% } %>
